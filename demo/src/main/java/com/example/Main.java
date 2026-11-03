@@ -21,7 +21,7 @@ import static org.lwjgl.system.MemoryUtil.*;
 public class Main {
     private long window;
     private int shaderProgram, vaoId, uniModelMatrix, uniTexture, uniColor, uniTint, uniAlpha, uniUseTexture;
-    private int texPlayer, texPlayerDamage, texEnemy, texBoss, texLaser, texBackground, texBackground2;
+    private int texPlayer, texPlayerDamage, texEnemy, texBoss, texLaser, texBackground, texBackground2, texBackground3;
 
     private TextRenderer textRenderer;
 
@@ -36,7 +36,7 @@ public class Main {
     
     // Variáveis para a animação de troca de fundo
     private float transicaoFundo = 0.0f; // Vai de 0.0 a 1.0
-    private int fundoAtualNivel = 0;     // 0 = fundo normal, 1 = fundo 2
+    private int fundoAtualNivel = 0;     // 0 = normal, 1 = fundo 2, 2 = fundo 3
 
     private static class Estrela {
         float x, y, vel, tamanho, brilho;
@@ -236,6 +236,7 @@ public class Main {
     private void carregarTexturas() {
         texBackground = carregarUmaTextura("demo/src/main/resources/background.png");
         texBackground2 = carregarUmaTextura("demo/src/main/resources/background2.png");
+        texBackground3 = carregarUmaTextura("demo/src/main/resources/background3.png");
         texPlayer = carregarUmaTextura("demo/src/main/resources/player.png");
         texPlayerDamage = carregarUmaTextura("demo/src/main/resources/playerdamage.png");
         texEnemy = carregarUmaTextura("demo/src/main/resources/enemy.png");
@@ -266,22 +267,33 @@ public class Main {
             glUseProgram(shaderProgram);
 
             // ================= ANIMAÇÃO DE TRANSIÇÃO DO FUNDO =================
-            // Se o boss morreu, inicia a transição escurecendo o ecrã
-            if (bossAtual >= 1 && fundoAtualNivel == 0 && transicaoFundo < 1.0f) {
-                transicaoFundo += delta * 1.5f; // Velocidade da transição (1.5 = meio segundo)
+            // Se o 2º boss morreu, inicia a transição para o fundo 3
+            if (bossAtual >= 2 && fundoAtualNivel == 1 && transicaoFundo < 1.0f) {
+                transicaoFundo += delta * 1.5f; 
                 if (transicaoFundo >= 1.0f) {
                     transicaoFundo = 1.0f;
-                    fundoAtualNivel = 1; // Troca oficialmente a textura no pico da escuridão
+                    fundoAtualNivel = 2; // Troca oficialmente a textura no pico da escuridão
                 }
             } 
-            // Se já trocou, começa a clarear o ecrã
-            else if (fundoAtualNivel == 1 && transicaoFundo > 0.0f) {
+            // Se o 1º boss morreu, inicia a transição para o fundo 2
+            else if (bossAtual >= 1 && fundoAtualNivel == 0 && transicaoFundo < 1.0f) {
+                transicaoFundo += delta * 1.5f; 
+                if (transicaoFundo >= 1.0f) {
+                    transicaoFundo = 1.0f;
+                    fundoAtualNivel = 1; 
+                }
+            } 
+            // Se já trocou, começa a clarear o ecrã (independentemente do nível)
+            else if (transicaoFundo > 0.0f && ((fundoAtualNivel == 1 && bossAtual < 2) || (fundoAtualNivel == 2))) {
                 transicaoFundo -= delta * 1.5f;
                 if (transicaoFundo < 0.0f) transicaoFundo = 0.0f;
             }
 
             // FUNDO BASE (textura)
-            int texturaDoFundo = (fundoAtualNivel == 1 && texBackground2 != 0) ? texBackground2 : texBackground;
+            int texturaDoFundo = texBackground;
+            if (fundoAtualNivel == 1 && texBackground2 != 0) texturaDoFundo = texBackground2;
+            if (fundoAtualNivel == 2 && texBackground3 != 0) texturaDoFundo = texBackground3;
+
             if (texturaDoFundo != 0) {
                 restaurarTextura();
                 desenhar(0.0f, 0.0f, 2.5f, 2.5f, 0, texturaDoFundo, 1.0f);
@@ -437,7 +449,7 @@ public class Main {
     }
 
     private void limpar() {
-        glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage); glDeleteTextures(texEnemy); glDeleteTextures(texBoss); glDeleteTextures(texLaser); glDeleteTextures(texBackground); glDeleteTextures(texBackground2);
+        glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage); glDeleteTextures(texEnemy); glDeleteTextures(texBoss); glDeleteTextures(texLaser); glDeleteTextures(texBackground); glDeleteTextures(texBackground2); glDeleteTextures(texBackground3);
         glDeleteProgram(shaderProgram);
         if (window != NULL) {
             glfwFreeCallbacks(window);
