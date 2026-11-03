@@ -31,8 +31,12 @@ public class Main {
     private List<Particula> particulas = new ArrayList<>();
     private Random random = new Random();
 
-    // ===== FUNDO ANIMADO =====
+    // ===== FUNDO ANIMADO E TRANSIÇÃO =====
     private List<Estrela> estrelas = new ArrayList<>();
+    
+    // Variáveis para a animação de troca de fundo
+    private float transicaoFundo = 0.0f; // Vai de 0.0 a 1.0
+    private int fundoAtualNivel = 0;     // 0 = fundo normal, 1 = fundo 2
 
     private static class Estrela {
         float x, y, vel, tamanho, brilho;
@@ -123,9 +127,12 @@ public class Main {
         player = new Player(); inimigos.clear(); tiros.clear(); particulas.clear();
         inimigosMortos = 0; bossAtual = 0; bossNaTela = false; gameOver = false;
         escolhendoMelhoria = false; spawnTimer = 0; screenShake = 0; tempoDanoPlayer = 0; tempoInvencivel = 0;
+        
+        // Reset da transição de fundo
+        transicaoFundo = 0.0f;
+        fundoAtualNivel = 0;
     }
 
-    // ===== INICIALIZAÇÃO DO FUNDO ANIMADO =====
     private void inicializarFundo() {
         estrelas.clear();
         for (int i = 0; i < 120; i++) {
@@ -151,7 +158,6 @@ public class Main {
     }
 
     private void desenharFundoAnimado(float tempo, int nivel) {
-        // ===== ESTRELAS =====
         glUniform1i(uniUseTexture, 0);
         float tintR = Math.min(1.0f, 0.6f + bgR[nivel]);
         float tintG = Math.min(1.0f, 0.6f + bgG[nivel]);
@@ -228,11 +234,8 @@ public class Main {
     }
 
     private void carregarTexturas() {
-        // Carrega o fundo 1
         texBackground = carregarUmaTextura("demo/src/main/resources/background.png");
-        // Carrega o fundo 2 (novo)
         texBackground2 = carregarUmaTextura("demo/src/main/resources/background2.png");
-
         texPlayer = carregarUmaTextura("demo/src/main/resources/player.png");
         texPlayerDamage = carregarUmaTextura("demo/src/main/resources/playerdamage.png");
         texEnemy = carregarUmaTextura("demo/src/main/resources/enemy.png");
@@ -262,10 +265,23 @@ public class Main {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glUseProgram(shaderProgram);
 
+            // ================= ANIMAÇÃO DE TRANSIÇÃO DO FUNDO =================
+            // Se o boss morreu, inicia a transição escurecendo o ecrã
+            if (bossAtual >= 1 && fundoAtualNivel == 0 && transicaoFundo < 1.0f) {
+                transicaoFundo += delta * 1.5f; // Velocidade da transição (1.5 = meio segundo)
+                if (transicaoFundo >= 1.0f) {
+                    transicaoFundo = 1.0f;
+                    fundoAtualNivel = 1; // Troca oficialmente a textura no pico da escuridão
+                }
+            } 
+            // Se já trocou, começa a clarear o ecrã
+            else if (fundoAtualNivel == 1 && transicaoFundo > 0.0f) {
+                transicaoFundo -= delta * 1.5f;
+                if (transicaoFundo < 0.0f) transicaoFundo = 0.0f;
+            }
+
             // FUNDO BASE (textura)
-            // Muda para o background2 se o bossAtual for maior ou igual a 1 (já mataste o 1º boss)
-            int texturaDoFundo = (bossAtual >= 1 && texBackground2 != 0) ? texBackground2 : texBackground;
-            
+            int texturaDoFundo = (fundoAtualNivel == 1 && texBackground2 != 0) ? texBackground2 : texBackground;
             if (texturaDoFundo != 0) {
                 restaurarTextura();
                 desenhar(0.0f, 0.0f, 2.5f, 2.5f, 0, texturaDoFundo, 1.0f);
@@ -273,6 +289,14 @@ public class Main {
 
             // FUNDO ANIMADO (estrelas)
             desenharFundoAnimado(tempoAtual, nivel);
+
+            // Desenha o retângulo preto por cima do fundo para fazer o efeito de escurecer/clarear
+            if (transicaoFundo > 0.0f) {
+                glUniform1i(uniUseTexture, 0);
+                glUniform3f(uniColor, 0.0f, 0.0f, 0.0f); // Preto
+                desenhar(0.0f, 0.0f, 3.0f, 3.0f, 0, 0, transicaoFundo);
+            }
+            // ===================================================================
 
             // LÓGICA
             if (!gameOver && !escolhendoMelhoria && !pausado && !noMenuInicial) {
