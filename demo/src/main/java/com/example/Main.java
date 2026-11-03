@@ -24,6 +24,7 @@ public class Main {
     private int texPlayer, texPlayerDamage, texEnemy, texBoss, texLaser, texBackground, texBackground2, texBackground3;
 
     private TextRenderer textRenderer;
+    private SettingsMenu config = new SettingsMenu();
 
     private Player player;
     private List<Inimigo> inimigos = new ArrayList<>();
@@ -31,12 +32,14 @@ public class Main {
     private List<Particula> particulas = new ArrayList<>();
     private Random random = new Random();
 
-    // ===== FUNDO ANIMADO E TRANSIÇÃO =====
     private List<Estrela> estrelas = new ArrayList<>();
-    
-    // Variáveis para a animação de troca de fundo
-    private float transicaoFundo = 0.0f; // Vai de 0.0 a 1.0
-    private int fundoAtualNivel = 0;     // 0 = normal, 1 = fundo 2, 2 = fundo 3
+    // Animação de mudança de cenário (warp)
+    private boolean transicaoAtiva = false;
+    private float transicaoTempo = 0.0f, warp = 0.0f, flash = 0.0f;
+    private int nivelDestino = 0;
+    private static final float TRANS_DURACAO = 3.0f; // duração total (s)
+    private static final float TRANS_PICO = 1.2f;    // momento da troca de fundo (s)
+    private int fundoAtualNivel = 0;
 
     private static class Estrela {
         float x, y, vel, tamanho, brilho;
@@ -45,7 +48,6 @@ public class Main {
             this.tamanho = tamanho; this.brilho = brilho;
         }
     }
-    // =========================
 
     private float tempoAnterior, spawnTimer = 0.0f;
     private boolean noMenuInicial = true, pausado = false, gameOver = false, escolhendoMelhoria = false;
@@ -61,10 +63,11 @@ public class Main {
     private float[] bgB = {0.1f, 0.1f, 0.1f, 0.2f};
 
     public void run() {
+        Config.carregar();
         init();
         setupGraphics();
         carregarTexturas();
-        textRenderer = new TextRenderer("/font.ttf", 48);
+        textRenderer = new TextRenderer("/font.ttf", 48, vaoId);
         player = new Player();
         inicializarFundo();
         tempoAnterior = (float) glfwGetTime();
@@ -86,28 +89,39 @@ public class Main {
         window = glfwCreateWindow(800, 600, "SpaceWar", NULL, NULL);
 
         glfwSetKeyCallback(window, (window, key, scancode, action, mods) -> {
+            // Se o menu de configurações está aberto, ele trata de todas as teclas
+            if (config.isAberto()) { config.aoTecla(key, action); return; }
+
             if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) glfwSetWindowShouldClose(window, true);
 
             if (noMenuInicial && action == GLFW_PRESS) {
                 if (key == GLFW_KEY_UP && menuOpcaoInicial > 0) menuOpcaoInicial--;
-                if (key == GLFW_KEY_DOWN && menuOpcaoInicial < 1) menuOpcaoInicial++;
+                if (key == GLFW_KEY_DOWN && menuOpcaoInicial < 2) menuOpcaoInicial++;
                 if (key == GLFW_KEY_ENTER) {
                     if (menuOpcaoInicial == 0) { noMenuInicial = false; reiniciarJogo(); }
-                    else if (menuOpcaoInicial == 1) glfwSetWindowShouldClose(window, true);
+                    else if (menuOpcaoInicial == 1) config.abrir();
+                    else if (menuOpcaoInicial == 2) glfwSetWindowShouldClose(window, true);
                 }
             }
 
             if (pausado && action == GLFW_PRESS) {
                 if (key == GLFW_KEY_UP && menuOpcaoPausa > 0) menuOpcaoPausa--;
-                if (key == GLFW_KEY_DOWN && menuOpcaoPausa < 2) menuOpcaoPausa++;
+                if (key == GLFW_KEY_DOWN && menuOpcaoPausa < 3) menuOpcaoPausa++;
                 if (key == GLFW_KEY_ENTER) {
                     if (menuOpcaoPausa == 0) pausado = false;
                     else if (menuOpcaoPausa == 1) { reiniciarJogo(); pausado = false; }
-                    else if (menuOpcaoPausa == 2) { reiniciarJogo(); pausado = false; noMenuInicial = true; }
+                    else if (menuOpcaoPausa == 2) config.abrir();
+                    else if (menuOpcaoPausa == 3) { reiniciarJogo(); pausado = false; noMenuInicial = true; }
                 }
             }
 
-            if (key == GLFW_KEY_L && action == GLFW_PRESS && !gameOver && !escolhendoMelhoria && !noMenuInicial) {
+            // Game over: ENTER volta ao menu inicial
+            if (gameOver && !noMenuInicial && action == GLFW_PRESS && key == GLFW_KEY_ENTER) {
+                reiniciarJogo();
+                noMenuInicial = true;
+            }
+
+            if (key == Config.tecla(Config.Acao.PAUSAR) && action == GLFW_PRESS && !gameOver && !escolhendoMelhoria && !noMenuInicial) {
                 pausado = !pausado; menuOpcaoPausa = 0;
             }
 
@@ -127,10 +141,7 @@ public class Main {
         player = new Player(); inimigos.clear(); tiros.clear(); particulas.clear();
         inimigosMortos = 0; bossAtual = 0; bossNaTela = false; gameOver = false;
         escolhendoMelhoria = false; spawnTimer = 0; screenShake = 0; tempoDanoPlayer = 0; tempoInvencivel = 0;
-        
-        // Reset da transição de fundo
-        transicaoFundo = 0.0f;
-        fundoAtualNivel = 0;
+        transicaoAtiva = false; transicaoTempo = 0.0f; warp = 0.0f; flash = 0.0f; fundoAtualNivel = 0;
     }
 
     private void inicializarFundo() {
@@ -140,16 +151,14 @@ public class Main {
             estrelas.add(new Estrela(
                     (random.nextFloat() * 2.0f) - 1.0f,
                     (random.nextFloat() * 2.0f) - 1.0f,
-                    vel,
-                    0.005f + vel * 0.01f,
-                    0.3f + random.nextFloat() * 0.7f
+                    vel, 0.005f + vel * 0.01f, 0.3f + random.nextFloat() * 0.7f
             ));
         }
     }
 
-    private void atualizarFundo(float delta, float tempo) {
+    private void atualizarFundo(float delta) {
         for (Estrela e : estrelas) {
-            e.y -= e.vel * delta * 3.0f;
+            e.y -= e.vel * delta * 3.0f * (1.0f + warp * 12.0f);
             if (e.y < -1.0f) {
                 e.y = 1.0f;
                 e.x = (random.nextFloat() * 2.0f) - 1.0f;
@@ -157,20 +166,17 @@ public class Main {
         }
     }
 
-    private void desenharFundoAnimado(float tempo, int nivel) {
+    private void desenharFundoAnimado(int nivel) {
         glUniform1i(uniUseTexture, 0);
         float tintR = Math.min(1.0f, 0.6f + bgR[nivel]);
         float tintG = Math.min(1.0f, 0.6f + bgG[nivel]);
         float tintB = Math.min(1.0f, 0.9f + bgB[nivel]);
-        
+
         for (Estrela e : estrelas) {
             float a = 0.6f + e.brilho * 0.4f;
-            glUniform3f(uniColor, tintR * e.brilho + (1 - e.brilho) * 0.8f,
-                    tintG * e.brilho + (1 - e.brilho) * 0.8f,
-                    tintB);
-            desenhar(e.x, e.y, e.tamanho, e.tamanho, 0, 0, a);
+            glUniform3f(uniColor, tintR * e.brilho + (1 - e.brilho) * 0.8f, tintG * e.brilho + (1 - e.brilho) * 0.8f, tintB);
+            desenhar(e.x, e.y, e.tamanho, e.tamanho * (1.0f + warp * 25.0f), 0, 0, Math.min(1.0f, a + warp * 0.4f));
         }
-
         restaurarTextura();
     }
 
@@ -178,13 +184,19 @@ public class Main {
         GL.createCapabilities();
         glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        // Vertex shader: uUV permite escolher uma sub-região da textura (usado pelo texto)
         int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertexShader, "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 TexCoord;\nuniform mat4 uModel;\nvoid main() { gl_Position = uModel * vec4(aPos, 1.0); TexCoord = aTexCoord; }\0");
+        glShaderSource(vertexShader, "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 TexCoord;\nuniform mat4 uModel;\nuniform vec4 uUV;\nvoid main() { gl_Position = uModel * vec4(aPos, 1.0); TexCoord = uUV.xy + aTexCoord * (uUV.zw - uUV.xy); }\0");
         glCompileShader(vertexShader);
+        if (glGetShaderi(vertexShader, GL_COMPILE_STATUS) == 0)
+            System.err.println("Erro no vertex shader: " + glGetShaderInfoLog(vertexShader));
 
+        // Fragment shader: useFont == 1 usa o canal vermelho da textura como alpha
         int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragmentShader, "#version 330 core\nin vec2 TexCoord;\nout vec4 FragColor;\nuniform sampler2D uTexture;\nuniform vec3 uColor;\nuniform vec3 uTint;\nuniform float uAlpha;\nuniform int useTexture;\nvoid main() { \n if (useTexture == 1) {\n vec4 texColor = texture(uTexture, TexCoord);\n if(texColor.a < 0.1) discard;\n FragColor = vec4(texColor.rgb * uTint, texColor.a);\n } else {\n FragColor = vec4(uColor, uAlpha);\n }\n}\0");
+        glShaderSource(fragmentShader, "#version 330 core\nin vec2 TexCoord;\nout vec4 FragColor;\nuniform sampler2D uTexture;\nuniform vec3 uColor;\nuniform vec3 uTint;\nuniform float uAlpha;\nuniform int useTexture;\nuniform int useFont;\nvoid main() {\n if (useFont == 1) {\n float a = texture(uTexture, TexCoord).r;\n FragColor = vec4(uColor, a * uAlpha);\n } else if (useTexture == 1) {\n vec4 texColor = texture(uTexture, TexCoord);\n if(texColor.a < 0.1) discard;\n FragColor = vec4(texColor.rgb * uTint, texColor.a);\n } else {\n FragColor = vec4(uColor, uAlpha);\n }\n}\0");
         glCompileShader(fragmentShader);
+        if (glGetShaderi(fragmentShader, GL_COMPILE_STATUS) == 0)
+            System.err.println("Erro no fragment shader: " + glGetShaderInfoLog(fragmentShader));
 
         shaderProgram = glCreateProgram();
         glAttachShader(shaderProgram, vertexShader);
@@ -198,6 +210,9 @@ public class Main {
         uniAlpha = glGetUniformLocation(shaderProgram, "uAlpha");
         uniUseTexture = glGetUniformLocation(shaderProgram, "useTexture");
         glUseProgram(shaderProgram);
+
+        // Valor por defeito do uUV: textura inteira
+        glUniform4f(glGetUniformLocation(shaderProgram, "uUV"), 0f, 0f, 1f, 1f);
 
         float[] vertices = { -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.5f, 0.5f, 0.0f, 1.0f, 1.0f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f };
         int[] indices = { 0, 1, 2, 2, 3, 0 };
@@ -254,6 +269,11 @@ public class Main {
         glUniform3f(uniTint, 1.0f, 1.0f, 1.0f);
     }
 
+    /** Atalho para desenhar texto centrado em cx. */
+    private void texto(String s, float cx, float y, float scale, float r, float g, float b) {
+        StartMenu.textoCentrado(textRenderer, s, cx, y, scale, shaderProgram, uniModelMatrix, uniColor, uniAlpha, r, g, b);
+    }
+
     private void loop() {
         while (!glfwWindowShouldClose(window)) {
             float tempoAtual = (float) glfwGetTime();
@@ -266,57 +286,25 @@ public class Main {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glUseProgram(shaderProgram);
 
-            // ================= ANIMAÇÃO DE TRANSIÇÃO DO FUNDO =================
-            // Se o 2º boss morreu, inicia a transição para o fundo 3
-            if (bossAtual >= 2 && fundoAtualNivel == 1 && transicaoFundo < 1.0f) {
-                transicaoFundo += delta * 1.5f; 
-                if (transicaoFundo >= 1.0f) {
-                    transicaoFundo = 1.0f;
-                    fundoAtualNivel = 2; // Troca oficialmente a textura no pico da escuridão
-                }
-            } 
-            // Se o 1º boss morreu, inicia a transição para o fundo 2
-            else if (bossAtual >= 1 && fundoAtualNivel == 0 && transicaoFundo < 1.0f) {
-                transicaoFundo += delta * 1.5f; 
-                if (transicaoFundo >= 1.0f) {
-                    transicaoFundo = 1.0f;
-                    fundoAtualNivel = 1; 
-                }
-            } 
-            // Se já trocou, começa a clarear o ecrã (independentemente do nível)
-            else if (transicaoFundo > 0.0f && ((fundoAtualNivel == 1 && bossAtual < 2) || (fundoAtualNivel == 2))) {
-                transicaoFundo -= delta * 1.5f;
-                if (transicaoFundo < 0.0f) transicaoFundo = 0.0f;
-            }
-
-            // FUNDO BASE (textura)
             int texturaDoFundo = texBackground;
             if (fundoAtualNivel == 1 && texBackground2 != 0) texturaDoFundo = texBackground2;
             if (fundoAtualNivel == 2 && texBackground3 != 0) texturaDoFundo = texBackground3;
 
             if (texturaDoFundo != 0) {
                 restaurarTextura();
-                desenhar(0.0f, 0.0f, 2.5f, 2.5f, 0, texturaDoFundo, 1.0f);
+                float zoom = 2.5f * (1.0f + warp * 0.25f); // "soco" de zoom durante o warp
+                desenhar(0.0f, 0.0f, zoom, zoom, 0, texturaDoFundo, 1.0f);
             }
 
-            // FUNDO ANIMADO (estrelas)
-            desenharFundoAnimado(tempoAtual, nivel);
+            desenharFundoAnimado(nivel);
 
-            // Desenha o retângulo preto por cima do fundo para fazer o efeito de escurecer/clarear
-            if (transicaoFundo > 0.0f) {
-                glUniform1i(uniUseTexture, 0);
-                glUniform3f(uniColor, 0.0f, 0.0f, 0.0f); // Preto
-                desenhar(0.0f, 0.0f, 3.0f, 3.0f, 0, 0, transicaoFundo);
-            }
-            // ===================================================================
-
-            // LÓGICA
             if (!gameOver && !escolhendoMelhoria && !pausado && !noMenuInicial) {
-                atualizarFundo(delta, tempoAtual);
+                atualizarTransicao(delta);
+                atualizarFundo(delta);
 
                 player.atualizar(window, delta, tempoAtual);
                 if (tempoInvencivel > 0) tempoInvencivel -= delta;
-                if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && player.podeAtirar(tempoAtual)) {
+                if (Config.pressionada(window, Config.Acao.ATIRAR) && player.podeAtirar(tempoAtual)) {
                     tiros.add(new Tiro(player.getX(), player.getY() + 0.1f, player.getDanoDoTiro(), texLaser));
                 }
                 if (!bossNaTela) {
@@ -372,7 +360,6 @@ public class Main {
                 }
             }
 
-            // DESENHO DAS ENTIDADES
             float offsetX = 0, offsetY = 0;
             if (screenShake > 0) {
                 offsetX = (random.nextFloat() - 0.5f) * screenShake;
@@ -384,8 +371,8 @@ public class Main {
                 restaurarTextura();
                 if (player.getVida() > 0) {
                     float rotacao = 0.0f;
-                    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS && !pausado) rotacao = 0.2f;
-                    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS && !pausado) rotacao = -0.2f;
+                    if (Config.pressionada(window, Config.Acao.ESQUERDA) && !pausado) rotacao = 0.2f;
+                    if (Config.pressionada(window, Config.Acao.DIREITA) && !pausado) rotacao = -0.2f;
                     if (tempoDanoPlayer > 0) {
                         tempoDanoPlayer -= delta;
                         int texturaDano = (int)(tempoDanoPlayer * 30) % 2 == 0 ? texPlayerDamage : texPlayer;
@@ -406,23 +393,82 @@ public class Main {
                 for (Particula p : particulas) desenhar(p.x + offsetX, p.y + offsetY, p.tamanho, p.tamanho, 0, p.texturaId, 1.0f);
             }
 
-            // INTERFACES (UI)
             glUniform1i(uniUseTexture, 0);
+            desenharTransicao();
 
-            if (noMenuInicial) {
+            if (config.isAberto()) {
+                config.desenhar(textRenderer, shaderProgram, vaoId, uniModelMatrix, uniColor, uniAlpha);
+            } else if (noMenuInicial) {
                 StartMenu.desenharMenuInicial(textRenderer, shaderProgram, vaoId, uniModelMatrix, uniColor, uniAlpha, menuOpcaoInicial);
             } else if (pausado) {
                 Pause.desenharMenuPausa(textRenderer, shaderProgram, vaoId, uniModelMatrix, uniColor, uniAlpha, menuOpcaoPausa);
             } else if (escolhendoMelhoria) {
                 glUniform1f(uniAlpha, 1.0f);
                 glUniform3f(uniColor, 0.0f, 1.0f, 0.0f); desenhar(0.0f, 0.0f, 2.0f, 2.0f, 0, 0, 0.8f);
-                glUniform3f(uniColor, 0.0f, 0.5f, 0.0f); desenhar(-0.4f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
+                glUniform3f(uniColor, 0.0f, 0.5f, 0.0f); desenhar(-0.5f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
                 glUniform3f(uniColor, 0.0f, 0.5f, 1.0f); desenhar( 0.0f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
-                glUniform3f(uniColor, 1.0f, 0.5f, 0.0f); desenhar( 0.4f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
+                glUniform3f(uniColor, 1.0f, 0.5f, 0.0f); desenhar( 0.5f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
+
+                texto(Config.t("M_TITULO"), 0.0f, 0.45f, 0.8f, 1f, 1f, 1f);
+                texto(Config.t("M_VIDA"), -0.5f, -0.2f, 0.35f, 1f, 1f, 1f);
+                texto(Config.t("M_RESIST"), 0.0f, -0.2f, 0.35f, 1f, 1f, 1f);
+                texto(Config.t("M_TIRO"), 0.5f, -0.2f, 0.35f, 1f, 1f, 1f);
+            } else if (gameOver) {
+                StartMenu.desenharRect(vaoId, uniModelMatrix, uniColor, uniAlpha, 0f, 0f, 2.5f, 2.5f, 0.3f, 0f, 0f, 0.6f);
+                texto(Config.t("GAME_OVER"), 0.0f, 0.1f, 1.4f, 1f, 0.2f, 0.2f);
+                texto(Config.t("PRESSIONA_ENTER"), 0.0f, -0.2f, 0.6f, 1f, 1f, 1f);
             }
 
             glfwSwapBuffers(window);
             glfwPollEvents();
+        }
+    }
+
+    /** Decide quando começa a transição e calcula a intensidade do warp e do flash. */
+    private void atualizarTransicao(float delta) {
+        int alvo = Math.min(bossAtual, 2); // há 3 fundos (0, 1, 2)
+        if (!transicaoAtiva && alvo != fundoAtualNivel) {
+            transicaoAtiva = true;
+            transicaoTempo = 0.0f;
+            nivelDestino = alvo;
+        }
+        if (!transicaoAtiva) { warp = 0.0f; flash = 0.0f; return; }
+
+        transicaoTempo += delta;
+        float t = transicaoTempo;
+
+        // warp: sobe até ao pico e depois desce
+        float i = (t < TRANS_PICO) ? t / TRANS_PICO : 1.0f - (t - TRANS_PICO) / (TRANS_DURACAO - TRANS_PICO);
+        i = Math.max(0.0f, Math.min(1.0f, i));
+        warp = i * i * (3.0f - 2.0f * i);
+
+        // flash branco no momento da troca (esconde a mudança de fundo)
+        flash = Math.max(0.0f, 1.0f - Math.abs(t - TRANS_PICO) / 0.35f);
+        if (t >= TRANS_PICO) fundoAtualNivel = nivelDestino;
+
+        screenShake = Math.max(screenShake, 0.03f * warp);
+
+        if (t >= TRANS_DURACAO) { transicaoAtiva = false; warp = 0.0f; flash = 0.0f; }
+    }
+
+    /** Escurecimento azulado, flash branco e banner "SETOR N". */
+    private void desenharTransicao() {
+        if (!transicaoAtiva) return;
+
+        if (warp > 0.0f)
+            StartMenu.desenharRect(vaoId, uniModelMatrix, uniColor, uniAlpha, 0f, 0f, 2.5f, 2.5f, 0.05f, 0.1f, 0.3f, 0.35f * warp);
+        if (flash > 0.0f)
+            StartMenu.desenharRect(vaoId, uniModelMatrix, uniColor, uniAlpha, 0f, 0f, 2.5f, 2.5f, 1f, 1f, 1f, flash);
+
+        float t = transicaoTempo;
+        float inicio = TRANS_PICO + 0.15f;
+        if (t > inicio) {
+            float p = Math.min(1.0f, (t - inicio) / 0.5f);                                    // entrada
+            float saida = Math.max(0.0f, Math.min(1.0f, (t - (TRANS_DURACAO - 0.6f)) / 0.6f)); // saída
+            float escala = 1.6f - 0.6f * (1.0f - (1.0f - p) * (1.0f - p));                    // encolhe com easing
+            textRenderer.setAlpha(p * (1.0f - saida));
+            texto(Config.t("SETOR") + " " + (nivelDestino + 1), 0.0f, 0.5f, escala, 1f, 1f, 0.4f);
+            textRenderer.setAlpha(1.0f);
         }
     }
 
@@ -450,11 +496,9 @@ public class Main {
 
     private void limpar() {
         glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage); glDeleteTextures(texEnemy); glDeleteTextures(texBoss); glDeleteTextures(texLaser); glDeleteTextures(texBackground); glDeleteTextures(texBackground2); glDeleteTextures(texBackground3);
+        if (textRenderer != null) textRenderer.cleanup();
         glDeleteProgram(shaderProgram);
-        if (window != NULL) {
-            glfwFreeCallbacks(window);
-            glfwDestroyWindow(window);
-        }
+        if (window != NULL) { glfwFreeCallbacks(window); glfwDestroyWindow(window); }
         glfwTerminate();
         GLFWErrorCallback errorCallback = glfwSetErrorCallback(null);
         if (errorCallback != null) errorCallback.free();

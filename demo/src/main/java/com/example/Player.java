@@ -1,7 +1,5 @@
 package com.example;
 
-import static org.lwjgl.glfw.GLFW.*;
-
 public class Player {
     private float x = 0.0f;
     private float y = -0.8f;
@@ -16,10 +14,10 @@ public class Player {
     private float cooldownTiro = 0.3f; 
 
     public void atualizar(long window, float delta, float tempoAtual) {
-        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)  x -= velocidade * delta;
-        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) x += velocidade * delta;
-        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)    y += velocidade * delta;
-        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)  y -= velocidade * delta;
+        if (Config.pressionada(window, Config.Acao.ESQUERDA)) x -= velocidade * delta;
+        if (Config.pressionada(window, Config.Acao.DIREITA))  x += velocidade * delta;
+        if (Config.pressionada(window, Config.Acao.CIMA))     y += velocidade * delta;
+        if (Config.pressionada(window, Config.Acao.BAIXO))    y -= velocidade * delta;
 
         if (x < -0.9f) x = -0.9f;
         if (x > 0.9f) x = 0.9f;
