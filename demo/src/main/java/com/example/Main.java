@@ -280,6 +280,10 @@ public class Main {
             float delta = tempoAtual - tempoAnterior;
             tempoAnterior = tempoAtual;
 
+            // Se as animações foram desligadas (ex.: a partir do menu de pausa) a meio de uma
+            // transição, termina-a já para o fundo não ficar com zoom/warp.
+            if (!Config.animacoes) atualizarTransicao(0f);
+
             int nivel = Math.min(bossAtual, 3);
             glClearColor(bgR[nivel], bgG[nivel], bgB[nivel], 1.0f);
 
@@ -360,10 +364,14 @@ public class Main {
                 }
             }
 
+            // Tremor de ecrã: só desloca a imagem se as animações estiverem ligadas,
+            // mas o valor continua a decrescer na mesma.
             float offsetX = 0, offsetY = 0;
             if (screenShake > 0) {
-                offsetX = (random.nextFloat() - 0.5f) * screenShake;
-                offsetY = (random.nextFloat() - 0.5f) * screenShake;
+                if (Config.animacoes) {
+                    offsetX = (random.nextFloat() - 0.5f) * screenShake;
+                    offsetY = (random.nextFloat() - 0.5f) * screenShake;
+                }
                 screenShake -= delta * 0.5f;
             }
 
@@ -375,10 +383,11 @@ public class Main {
                     if (Config.pressionada(window, Config.Acao.DIREITA) && !pausado) rotacao = -0.2f;
                     if (tempoDanoPlayer > 0) {
                         tempoDanoPlayer -= delta;
-                        int texturaDano = (int)(tempoDanoPlayer * 30) % 2 == 0 ? texPlayerDamage : texPlayer;
+                        int texturaDano = (!Config.animacoes || (int)(tempoDanoPlayer * 30) % 2 == 0) ? texPlayerDamage : texPlayer;
                         desenhar(player.getX() + offsetX, player.getY() + offsetY, 0.15f, 0.15f, rotacao, texturaDano, 1.0f);
                     } else if (tempoInvencivel > 0) {
-                        if ((int)(tempoInvencivel * 15) % 2 == 0) desenhar(player.getX() + offsetX, player.getY() + offsetY, 0.15f, 0.15f, rotacao, texPlayer, 1.0f);
+                        if (!Config.animacoes || (int)(tempoInvencivel * 15) % 2 == 0)
+                            desenhar(player.getX() + offsetX, player.getY() + offsetY, 0.15f, 0.15f, rotacao, texPlayer, 1.0f);
                     } else {
                         desenhar(player.getX() + offsetX, player.getY() + offsetY, 0.15f, 0.15f, rotacao, texPlayer, 1.0f);
                     }
@@ -390,7 +399,8 @@ public class Main {
                     else desenhar(ini.getX() + offsetX, ini.getY() + offsetY, 0.15f, 0.15f, 0, texEnemy, 1.0f);
                 }
                 restaurarTextura();
-                for (Particula p : particulas) desenhar(p.x + offsetX, p.y + offsetY, p.tamanho, p.tamanho, 0, p.texturaId, 1.0f);
+                if (Config.animacoes)
+                    for (Particula p : particulas) desenhar(p.x + offsetX, p.y + offsetY, p.tamanho, p.tamanho, 0, p.texturaId, 1.0f);
             }
 
             glUniform1i(uniUseTexture, 0);
@@ -427,6 +437,15 @@ public class Main {
     /** Decide quando começa a transição e calcula a intensidade do warp e do flash. */
     private void atualizarTransicao(float delta) {
         int alvo = Math.min(bossAtual, 2); // há 3 fundos (0, 1, 2)
+
+        // Animações desligadas: troca o fundo logo, sem warp, flash nem banner
+        if (!Config.animacoes) {
+            fundoAtualNivel = alvo;
+            transicaoAtiva = false;
+            warp = 0.0f; flash = 0.0f;
+            return;
+        }
+
         if (!transicaoAtiva && alvo != fundoAtualNivel) {
             transicaoAtiva = true;
             transicaoTempo = 0.0f;

@@ -25,7 +25,7 @@ public class SettingsMenu {
     }
 
     private int numOpcoes() {
-        return tela == 0 ? 3 : Config.Acao.values().length + 2;
+        return tela == 0 ? 4 : Config.Acao.values().length + 2;
     }
 
     /** Chamado pelo callback de teclado do Main enquanto o menu está aberto. */
@@ -34,7 +34,7 @@ public class SettingsMenu {
         if (key == GLFW_KEY_ESCAPE) {
             if (action == GLFW_RELEASE) {
                 if (aEspera) aEspera = false;
-                else if (tela == 1) { tela = 0; opcao = 1; }
+                else if (tela == 1) { tela = 0; opcao = 2; }
                 else fechar();
             }
             return;
@@ -54,19 +54,16 @@ public class SettingsMenu {
         if (key == GLFW_KEY_DOWN && opcao < numOpcoes() - 1) opcao++;
 
         if (tela == 0) {
-            if (opcao == 0 && (key == GLFW_KEY_LEFT || key == GLFW_KEY_RIGHT || key == GLFW_KEY_ENTER)) {
+            boolean alterna = key == GLFW_KEY_LEFT || key == GLFW_KEY_RIGHT || key == GLFW_KEY_ENTER;
+            if (opcao == 0 && alterna) {
                 Config.idioma = (Config.idioma == Config.PORTUGUES) ? Config.INGLES : Config.PORTUGUES;
                 Config.guardar();
+            } else if (opcao == 1 && alterna) {
+                Config.animacoes = !Config.animacoes;
+                Config.guardar();
             } else if (key == GLFW_KEY_ENTER) {
-                if (opcao == 1) { tela = 1; opcao = 0; }
-                else if (opcao == 2) fechar();
-            }
-        } else {
-            int na = Config.Acao.values().length;
-            if (key == GLFW_KEY_ENTER) {
-                if (opcao < na) aEspera = true;
-                else if (opcao == na) { Config.resetarControlos(); Config.guardar(); }
-                else { tela = 0; opcao = 1; }
+                if (opcao == 2) { tela = 1; opcao = 0; }
+                else if (opcao == 3) fechar();
             }
         }
     }
@@ -79,9 +76,10 @@ public class SettingsMenu {
 
         if (tela == 0) {
             String[] linhas = {
-                    Config.t("IDIOMA") + ": " + Config.t("LANG_NOME"),
-                    Config.t("CONTROLOS"),
-                    Config.t("VOLTAR")
+                Config.t("IDIOMA") + ": " + Config.t("LANG_NOME"),
+                Config.t("ANIMACOES") + ": " + Config.t(Config.animacoes ? "LIGADO" : "DESLIGADO"),
+                Config.t("CONTROLOS"),
+                Config.t("VOLTAR")
             };
             for (int i = 0; i < linhas.length; i++) {
                 boolean sel = (i == opcao);

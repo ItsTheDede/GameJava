@@ -17,6 +17,8 @@ public class Config {
 
     public enum Acao { CIMA, BAIXO, ESQUERDA, DIREITA, ATIRAR, PAUSAR }
 
+    public static boolean animacoes = true;
+    
     public static final int PORTUGUES = 0, INGLES = 1;
     private static final String FICHEIRO = "config.properties";
 
@@ -39,6 +41,10 @@ public class Config {
         t("REINICIAR", "REINICIAR", "RESTART");
         t("MENU_PRINCIPAL", "MENU PRINCIPAL", "MAIN MENU");
 
+        t("ANIMACOES", "ANIMACOES", "ANIMATIONS");
+        t("LIGADO", "LIGADAS", "ON");
+        t("DESLIGADO", "DESLIGADAS", "OFF");
+        
         t("IDIOMA", "IDIOMA", "LANGUAGE");
         t("LANG_NOME", "PORTUGUES", "ENGLISH");
         t("CONTROLOS", "CONTROLOS", "CONTROLS");
@@ -134,6 +140,7 @@ public class Config {
         Properties p = new Properties();
         p.setProperty("idioma", String.valueOf(idioma));
         for (Acao a : Acao.values()) p.setProperty("tecla." + a.name(), String.valueOf(teclas[a.ordinal()]));
+        p.setProperty("animacoes", String.valueOf(animacoes));
         try (OutputStream os = new FileOutputStream(FICHEIRO)) {
             p.store(os, "SpaceWar");
         } catch (IOException e) {
@@ -146,6 +153,7 @@ public class Config {
         if (!f.exists()) return;
         Properties p = new Properties();
         try (InputStream is = new FileInputStream(f)) {
+            animacoes = Boolean.parseBoolean(p.getProperty("animacoes", "true"));
             p.load(is);
             idioma = Integer.parseInt(p.getProperty("idioma", "0")) == INGLES ? INGLES : PORTUGUES;
             for (Acao a : Acao.values()) {
