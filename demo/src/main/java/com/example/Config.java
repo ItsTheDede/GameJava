@@ -12,17 +12,17 @@ import java.util.Properties;
 
 import static org.lwjgl.glfw.GLFW.*;
 
-/** Configurações do jogo: idioma, controlos e textos traduzidos. */
+/** Configurações do jogo: idioma, animações, controlos e textos traduzidos. */
 public class Config {
 
     public enum Acao { CIMA, BAIXO, ESQUERDA, DIREITA, ATIRAR, PAUSAR }
 
-    public static boolean animacoes = true;
-    
     public static final int PORTUGUES = 0, INGLES = 1;
     private static final String FICHEIRO = "config.properties";
 
     public static int idioma = PORTUGUES;
+    public static boolean animacoes = true; // warp, flash, banner, partículas e piscar
+    public static boolean tremor = true;    // tremor de ecrã (só conta se animacoes estiver ligado)
     public static final int[] teclas = new int[Acao.values().length];
 
     private static final Map<String, String[]> TEXTOS = new HashMap<>();
@@ -41,12 +41,12 @@ public class Config {
         t("REINICIAR", "REINICIAR", "RESTART");
         t("MENU_PRINCIPAL", "MENU PRINCIPAL", "MAIN MENU");
 
-        t("ANIMACOES", "ANIMACOES", "ANIMATIONS");
-        t("LIGADO", "LIGADAS", "ON");
-        t("DESLIGADO", "DESLIGADAS", "OFF");
-        
         t("IDIOMA", "IDIOMA", "LANGUAGE");
         t("LANG_NOME", "PORTUGUES", "ENGLISH");
+        t("ANIMACOES", "ANIMACOES", "ANIMATIONS");
+        t("TREMOR", "TREMOR DE ECRA", "SCREEN SHAKE");
+        t("LIGADO", "LIGADAS", "ON");
+        t("DESLIGADO", "DESLIGADAS", "OFF");
         t("CONTROLOS", "CONTROLOS", "CONTROLS");
         t("VOLTAR", "VOLTAR", "BACK");
         t("REPOR", "REPOR PADRAO", "RESET DEFAULTS");
@@ -139,8 +139,9 @@ public class Config {
     public static void guardar() {
         Properties p = new Properties();
         p.setProperty("idioma", String.valueOf(idioma));
-        for (Acao a : Acao.values()) p.setProperty("tecla." + a.name(), String.valueOf(teclas[a.ordinal()]));
         p.setProperty("animacoes", String.valueOf(animacoes));
+        p.setProperty("tremor", String.valueOf(tremor));
+        for (Acao a : Acao.values()) p.setProperty("tecla." + a.name(), String.valueOf(teclas[a.ordinal()]));
         try (OutputStream os = new FileOutputStream(FICHEIRO)) {
             p.store(os, "SpaceWar");
         } catch (IOException e) {
@@ -153,9 +154,10 @@ public class Config {
         if (!f.exists()) return;
         Properties p = new Properties();
         try (InputStream is = new FileInputStream(f)) {
-            animacoes = Boolean.parseBoolean(p.getProperty("animacoes", "true"));
             p.load(is);
             idioma = Integer.parseInt(p.getProperty("idioma", "0")) == INGLES ? INGLES : PORTUGUES;
+            animacoes = Boolean.parseBoolean(p.getProperty("animacoes", "true"));
+            tremor = Boolean.parseBoolean(p.getProperty("tremor", "true"));
             for (Acao a : Acao.values()) {
                 String v = p.getProperty("tecla." + a.name());
                 if (v != null) teclas[a.ordinal()] = Integer.parseInt(v);
@@ -163,6 +165,8 @@ public class Config {
         } catch (IOException | NumberFormatException e) {
             System.err.println("Configuracao invalida, a usar valores por defeito.");
             idioma = PORTUGUES;
+            animacoes = true;
+            tremor = true;
             resetarControlos();
         }
     }
