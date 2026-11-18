@@ -13,38 +13,6 @@ import java.util.Random;
 
 import static org.lwjgl.glfw.Callbacks.*;
 import static org.lwjgl.glfw.GLFW.*;
-import static org.lwjgl.opengl.GL11.GL_BLEND;
-import static org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11.GL_FLOAT;
-import static org.lwjgl.opengl.GL11.GL_NEAREST;
-import static org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA;
-import static org.lwjgl.opengl.GL11.GL_RGBA;
-import static org.lwjgl.opengl.GL11.GL_SRC_ALPHA;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER;
-import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
-import static org.lwjgl.opengl.GL11.glBindTexture;
-import static org.lwjgl.opengl.GL11.glBlendFunc;
-import static org.lwjgl.opengl.GL11.glClear;
-import static org.lwjgl.opengl.GL11.glClearColor;
-import static org.lwjgl.opengl.GL11.glDeleteTextures;
-import static org.lwjgl.opengl.GL11.glDrawElements;
-import static org.lwjgl.opengl.GL11.glEnable;
-import static org.lwjgl.opengl.GL11.glGenTextures;
-import static org.lwjgl.opengl.GL11.glTexImage2D;
-import static org.lwjgl.opengl.GL11.glTexParameteri;
-import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
-import static org.lwjgl.opengl.GL13.glActiveTexture;
-import static org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER;
-import static org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER;
-import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
-import static org.lwjgl.opengl.GL15.glBindBuffer;
-import static org.lwjgl.opengl.GL15.glBufferData;
-import static org.lwjgl.opengl.GL15.glGenBuffers;
 import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.system.MemoryStack.*;
@@ -53,7 +21,7 @@ import static org.lwjgl.system.MemoryUtil.*;
 public class Main {
     private long window;
     private int shaderProgram, vaoId, uniModelMatrix, uniTexture, uniColor, uniTint, uniAlpha, uniUseTexture;
-    private int texPlayer, texPlayerDamage, texEnemy, texBoss, texLaser, texBackground, texBackground2, texBackground3;
+    private int texPlayer, texPlayerDamage, texEnemy, texBoss, texLaser, texBackground, texBackground2, texBackground3, texBackground4;
 
     private TextRenderer textRenderer;
     private SettingsMenu config = new SettingsMenu();
@@ -61,6 +29,7 @@ public class Main {
     private Player player;
     private List<Inimigo> inimigos = new ArrayList<>();
     private List<Tiro> tiros = new ArrayList<>();
+    private List<TiroInimigo> tirosInimigos = new ArrayList<>();
     private List<Particula> particulas = new ArrayList<>();
     private Random random = new Random();
 
@@ -72,6 +41,11 @@ public class Main {
     private static final float TRANS_DURACAO = 3.0f; // duração total (s)
     private static final float TRANS_PICO = 1.2f;    // momento da troca de fundo (s)
     private int fundoAtualNivel = 0;
+    
+    // CORREÇÃO AQUI: O índice 3 agora aponta para o fundo 3 (background4.png).
+    // Isto garante que ao matar o boss 4 (bossAtual = 4), o alvo seja 3,
+    // diferente do fundo anterior (2), acionando a transição.
+    private static final int[] FUNDO_POR_BOSS = {0, 1, 2, 3, 3};
 
     private static class Estrela {
         float x, y, vel, tamanho, brilho;
@@ -170,7 +144,7 @@ public class Main {
     }
 
     private void reiniciarJogo() {
-        player = new Player(); inimigos.clear(); tiros.clear(); particulas.clear();
+        player = new Player(); inimigos.clear(); tiros.clear(); tirosInimigos.clear(); particulas.clear();
         inimigosMortos = 0; bossAtual = 0; bossNaTela = false; gameOver = false;
         escolhendoMelhoria = false; spawnTimer = 0; screenShake = 0; tempoDanoPlayer = 0; tempoInvencivel = 0;
         transicaoAtiva = false; transicaoTempo = 0.0f; warp = 0.0f; flash = 0.0f; fundoAtualNivel = 0;
@@ -284,6 +258,7 @@ public class Main {
         texBackground = carregarUmaTextura("demo/src/main/resources/background.png");
         texBackground2 = carregarUmaTextura("demo/src/main/resources/background2.png");
         texBackground3 = carregarUmaTextura("demo/src/main/resources/background3.png");
+        texBackground4 = carregarUmaTextura("demo/src/main/resources/background4.png");
         texPlayer = carregarUmaTextura("demo/src/main/resources/player.png");
         texPlayerDamage = carregarUmaTextura("demo/src/main/resources/playerdamage.png");
         texEnemy = carregarUmaTextura("demo/src/main/resources/enemy.png");
@@ -325,6 +300,7 @@ public class Main {
             int texturaDoFundo = texBackground;
             if (fundoAtualNivel == 1 && texBackground2 != 0) texturaDoFundo = texBackground2;
             if (fundoAtualNivel == 2 && texBackground3 != 0) texturaDoFundo = texBackground3;
+            if (fundoAtualNivel == 3 && texBackground4 != 0) texturaDoFundo = texBackground4;
 
             if (texturaDoFundo != 0) {
                 restaurarTextura();
@@ -334,12 +310,13 @@ public class Main {
 
             desenharFundoAnimado(nivel);
 
+            // estrelas a mexer por trás do menu inicial
+            if (noMenuInicial && Config.animacoes) atualizarFundo(delta);
+
             if (!gameOver && !escolhendoMelhoria && !pausado && !noMenuInicial) {
                 atualizarTransicao(delta);
                 atualizarFundo(delta);
 
-                if (noMenuInicial && Config.animacoes) atualizarFundo(delta);
-                
                 player.atualizar(window, delta, tempoAtual);
                 if (tempoInvencivel > 0) tempoInvencivel -= delta;
                 if (Config.pressionada(window, Config.Acao.ATIRAR) && player.podeAtirar(tempoAtual)) {
@@ -366,10 +343,26 @@ public class Main {
                     Particula p = particulas.get(i); p.atualizar(delta);
                     if (p.vida <= 0) { particulas.remove(i); i--; }
                 }
+                // Tiros dos inimigos: mover, remover os que saem do ecrã e testar acerto no jogador
+                for (int i = 0; i < tirosInimigos.size(); i++) {
+                    TiroInimigo ti = tirosInimigos.get(i);
+                    ti.atualizar(delta);
+                    if (ti.foraDoEcra()) { tirosInimigos.remove(i); i--; continue; }
+                    if (tempoInvencivel <= 0 && Math.abs(ti.getX() - player.getX()) < 0.08f && Math.abs(ti.getY() - player.getY()) < 0.08f) {
+                        player.tomarDano(ti.getDano());
+                        tempoDanoPlayer = 0.2f; tempoInvencivel = 1.0f;
+                        criarExplosao(player.getX(), player.getY());
+                        screenShake = 0.15f;
+                        tirosInimigos.remove(i); i--;
+                        if (player.getVida() <= 0) gameOver = true;
+                    }
+                }
                 for (int i = 0; i < inimigos.size(); i++) {
                     Inimigo ini = inimigos.get(i);
                     ini.atualizar(delta);
                     if (ini.getY() < -1.0f) { inimigos.remove(i); i--; continue; }
+                    // só atira se já está no ecrã e ainda está acima do jogador
+                    if (ini.getY() < 0.95f && ini.getY() > player.getY() && ini.deveAtirar()) dispararInimigo(ini);
                     if (tempoInvencivel <= 0 && Math.abs(ini.getX() - player.getX()) < 0.15f && Math.abs(ini.getY() - player.getY()) < 0.15f) {
                         player.tomarDano(ini.getDanoNoPlayer());
                         tempoDanoPlayer = 0.2f; tempoInvencivel = 1.0f; screenShake = 0.15f;
@@ -389,7 +382,7 @@ public class Main {
                                 criarExplosao(ini.getX(), ini.getY());
                                 inimigos.remove(i); i--;
                                 if (ini.isBoss()) {
-                                    bossAtual++; bossNaTela = false; escolhendoMelhoria = true; tiros.clear();
+                                    bossAtual++; bossNaTela = false; escolhendoMelhoria = true; tiros.clear(); tirosInimigos.clear();
                                 } else { inimigosMortos++; }
                                 break;
                             }
@@ -427,6 +420,9 @@ public class Main {
                     }
                 }
                 for (Tiro t : tiros) desenhar(t.getX() + offsetX, t.getY() + offsetY, 0.05f, 0.1f, 0, t.getTexturaId(), 1.0f);
+                glUniform3f(uniTint, 1.0f, 0.3f, 0.3f); // laser inimigo avermelhado
+                for (TiroInimigo ti : tirosInimigos) desenhar(ti.getX() + offsetX, ti.getY() + offsetY, 0.05f, 0.1f, ti.getRotacao(), texLaser, 1.0f);
+                restaurarTextura();
                 for (Inimigo ini : inimigos) {
                     glUniform3f(uniTint, ini.getR(), ini.getG(), ini.getB());
                     if (ini.isBoss()) desenhar(ini.getX() + offsetX, ini.getY() + offsetY, 0.35f, 0.35f, 0, texBoss, 1.0f);
@@ -468,9 +464,23 @@ public class Main {
         }
     }
 
+    /** Cria os tiros de um inimigo. O boss dispara um leque; os inimigos comuns um tiro a direito. */
+    private void dispararInimigo(Inimigo ini) {
+        if (ini.isBoss()) {
+            int balas = 3 + (bossAtual / 2) * 2;   // boss 1 e 2: 3 balas; boss 3 e 4: 5 balas
+            float abertura = 0.25f;                 // ângulo entre balas (radianos)
+            for (int k = 0; k < balas; k++) {
+                float angulo = (k - (balas - 1) / 2.0f) * abertura;
+                tirosInimigos.add(new TiroInimigo(ini.getX(), ini.getY() - 0.2f, angulo, 0.7f, 15));
+            }
+        } else {
+            tirosInimigos.add(new TiroInimigo(ini.getX(), ini.getY() - 0.1f, 0f, 0.7f, 10));
+        }
+    }
+
     /** Decide quando começa a transição e calcula a intensidade do warp e do flash. */
     private void atualizarTransicao(float delta) {
-        int alvo = Math.min(bossAtual, 2); // há 3 fundos (0, 1, 2)
+        int alvo = FUNDO_POR_BOSS[Math.min(bossAtual, FUNDO_POR_BOSS.length - 1)]; // 4 fundos (0 a 3)
 
         // Animações desligadas: troca o fundo logo, sem warp, flash nem banner
         if (!Config.animacoes) {
@@ -548,7 +558,7 @@ public class Main {
     }
 
     private void limpar() {
-        glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage); glDeleteTextures(texEnemy); glDeleteTextures(texBoss); glDeleteTextures(texLaser); glDeleteTextures(texBackground); glDeleteTextures(texBackground2); glDeleteTextures(texBackground3);
+        glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage); glDeleteTextures(texEnemy); glDeleteTextures(texBoss); glDeleteTextures(texLaser); glDeleteTextures(texBackground); glDeleteTextures(texBackground2); glDeleteTextures(texBackground3); glDeleteTextures(texBackground4);
         if (textRenderer != null) textRenderer.cleanup();
         glDeleteProgram(shaderProgram);
         if (window != NULL) { glfwFreeCallbacks(window); glfwDestroyWindow(window); }
