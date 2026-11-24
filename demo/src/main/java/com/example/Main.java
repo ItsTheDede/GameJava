@@ -58,6 +58,7 @@ public class Main {
 
     private TextRenderer textRenderer;
     private SettingsMenu config = new SettingsMenu();
+    private Tutorial tutorial = new Tutorial();
 
     private Player player;
     private List<Inimigo> inimigos = new ArrayList<>();
@@ -130,13 +131,17 @@ public class Main {
             // Se o menu de configurações está aberto, ele trata de todas as teclas
             if (config.isAberto()) { config.aoTecla(key, action); return; }
 
+            // Se o tutorial está aberto, ele trata de todas as teclas
+            if (tutorial.isAberto()) { tutorial.aoTecla(key, action); return; }
+
             if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) glfwSetWindowShouldClose(window, true);
 
             if (noMenuInicial && action == GLFW_PRESS) {
                 if (key == GLFW_KEY_UP && menuOpcaoInicial > 0) menuOpcaoInicial--;
                 if (key == GLFW_KEY_DOWN && menuOpcaoInicial < 2) menuOpcaoInicial++;
+                if (key == GLFW_KEY_F1) tutorial.abrir(); // rever o tutorial a partir do menu inicial
                 if (key == GLFW_KEY_ENTER) {
-                    if (menuOpcaoInicial == 0) { noMenuInicial = false; reiniciarJogo(); }
+                    if (menuOpcaoInicial == 0) { noMenuInicial = false; reiniciarJogo(); tutorial.abrirSeForPrimeiraVez(); }
                     else if (menuOpcaoInicial == 1) config.abrir();
                     else if (menuOpcaoInicial == 2) glfwSetWindowShouldClose(window, true);
                 }
@@ -351,7 +356,7 @@ public class Main {
             // estrelas a mexer por trás do menu inicial
             if (noMenuInicial && Config.animacoes) atualizarFundo(delta);
 
-            if (!gameOver && !escolhendoMelhoria && !pausado && !noMenuInicial) {
+            if (!gameOver && !escolhendoMelhoria && !pausado && !noMenuInicial && !tutorial.isAberto()) {
                 atualizarTransicao(delta);
                 atualizarFundo(delta);
 
@@ -494,7 +499,9 @@ public class Main {
             glUniform1i(uniUseTexture, 0);
             desenharTransicao();
 
-            if (config.isAberto()) {
+            if (tutorial.isAberto()) {
+                desenharTutorial();
+            } else if (config.isAberto()) {
                 config.desenhar(textRenderer, shaderProgram, vaoId, uniModelMatrix, uniColor, uniAlpha);
             } else if (noMenuInicial) {
                 StartMenu.desenharMenuInicial(textRenderer, shaderProgram, vaoId, uniModelMatrix, uniColor, uniAlpha, menuOpcaoInicial);
@@ -520,6 +527,63 @@ public class Main {
             glfwSwapBuffers(window);
             glfwPollEvents();
         }
+    }
+
+    /** Desenha a página atual do tutorial (controlos, inimigos, bosses, melhorias). */
+    private void desenharTutorial() {
+        int p = tutorial.getPagina();
+
+        // fundo escuro por cima do jogo
+        glUniform3f(uniColor, 0.02f, 0.03f, 0.10f);
+        desenhar(0.0f, 0.0f, 2.5f, 2.5f, 0, 0, 0.92f);
+
+        String[] titulos = { "CONTROLOS", "INIMIGOS", "BOSSES", "MELHORIAS" };
+        texto(titulos[p], 0.0f, 0.75f, 0.8f, 1f, 1f, 0.4f);
+
+        switch (p) {
+            case 0: // controlos (lidos da configuracao do jogador)
+                texto("MOVER PARA A ESQUERDA: " + Tutorial.nomeTecla(Config.tecla(Config.Acao.ESQUERDA)), 0.0f, 0.4f, 0.4f, 1f, 1f, 1f);
+                texto("MOVER PARA A DIREITA: " + Tutorial.nomeTecla(Config.tecla(Config.Acao.DIREITA)), 0.0f, 0.25f, 0.4f, 1f, 1f, 1f);
+                texto("DISPARAR: " + Tutorial.nomeTecla(Config.tecla(Config.Acao.ATIRAR)), 0.0f, 0.1f, 0.4f, 1f, 1f, 1f);
+                texto("PAUSAR: " + Tutorial.nomeTecla(Config.tecla(Config.Acao.PAUSAR)), 0.0f, -0.05f, 0.4f, 1f, 1f, 1f);
+                texto("Sobrevive e destroi todos os inimigos!", 0.0f, -0.3f, 0.4f, 0.6f, 1f, 0.6f);
+                break;
+
+            case 1: // inimigos
+                restaurarTextura();
+                desenhar(0.0f, 0.4f, 0.25f, 0.25f, 0, texEnemy, 1.0f);
+                texto("Os inimigos descem do topo e disparam.", 0.0f, 0.1f, 0.4f, 1f, 1f, 1f);
+                texto("Se tocarem em ti ou os tiros te acertarem,", 0.0f, -0.05f, 0.4f, 1f, 1f, 1f);
+                texto("perdes vida. Depois do dano ficas", 0.0f, -0.2f, 0.4f, 1f, 1f, 1f);
+                texto("invencivel durante 1 segundo.", 0.0f, -0.35f, 0.4f, 1f, 1f, 1f);
+                break;
+
+            case 2: // bosses
+                restaurarTextura();
+                desenhar(0.0f, 0.4f, 0.4f, 0.4f, 0, texBoss, 1.0f);
+                texto("Destroi inimigos para invocar o boss.", 0.0f, 0.05f, 0.4f, 1f, 1f, 1f);
+                texto("O boss tem muita vida e dispara em leque.", 0.0f, -0.1f, 0.4f, 1f, 1f, 1f);
+                texto("Ha 4 bosses, cada um mais forte que o anterior.", 0.0f, -0.25f, 0.4f, 1f, 1f, 1f);
+                texto("Ao derrota-lo viajas para um novo setor!", 0.0f, -0.4f, 0.4f, 1f, 1f, 0.4f);
+                break;
+
+            case 3: // melhorias (mesmas cores e textos do ecra de escolha)
+                texto("Depois de cada boss escolhes uma melhoria:", 0.0f, 0.5f, 0.4f, 1f, 1f, 1f);
+                glUniform3f(uniColor, 0.0f, 0.5f, 0.0f); desenhar(-0.5f, 0.05f, 0.2f, 0.2f, 0, 0, 1.0f);
+                glUniform3f(uniColor, 0.0f, 0.5f, 1.0f); desenhar( 0.0f, 0.05f, 0.2f, 0.2f, 0, 0, 1.0f);
+                glUniform3f(uniColor, 1.0f, 0.5f, 0.0f); desenhar( 0.5f, 0.05f, 0.2f, 0.2f, 0, 0, 1.0f);
+                texto(Config.t("M_VIDA"), -0.5f, -0.15f, 0.35f, 1f, 1f, 1f);
+                texto(Config.t("M_RESIST"), 0.0f, -0.15f, 0.35f, 1f, 1f, 1f);
+                texto(Config.t("M_TIRO"), 0.5f, -0.15f, 0.35f, 1f, 1f, 1f);
+                texto("Prime 1, 2 ou 3 para escolher.", 0.0f, -0.4f, 0.4f, 0.6f, 1f, 0.6f);
+                break;
+        }
+
+        texto("Pagina " + (p + 1) + "/" + Tutorial.PAGINAS, 0.0f, -0.68f, 0.35f, 0.7f, 0.7f, 0.7f);
+        String rodape = (p < Tutorial.PAGINAS - 1)
+                ? "SETAS - navegar   ENTER - seguinte   ESC - saltar"
+                : "ENTER - comecar a jogar";
+        texto(rodape, 0.0f, -0.82f, 0.35f, 1f, 1f, 1f);
     }
 
     /** Cria os tiros de um inimigo. O boss dispara um leque; os inimigos comuns um tiro a direito. */
