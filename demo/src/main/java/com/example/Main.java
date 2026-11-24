@@ -13,6 +13,38 @@ import java.util.Random;
 
 import static org.lwjgl.glfw.Callbacks.*;
 import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.opengl.GL11.GL_BLEND;
+import static org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT;
+import static org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT;
+import static org.lwjgl.opengl.GL11.GL_FLOAT;
+import static org.lwjgl.opengl.GL11.GL_NEAREST;
+import static org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11.GL_RGBA;
+import static org.lwjgl.opengl.GL11.GL_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER;
+import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
+import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
+import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
+import static org.lwjgl.opengl.GL11.glBindTexture;
+import static org.lwjgl.opengl.GL11.glBlendFunc;
+import static org.lwjgl.opengl.GL11.glClear;
+import static org.lwjgl.opengl.GL11.glClearColor;
+import static org.lwjgl.opengl.GL11.glDeleteTextures;
+import static org.lwjgl.opengl.GL11.glDrawElements;
+import static org.lwjgl.opengl.GL11.glEnable;
+import static org.lwjgl.opengl.GL11.glGenTextures;
+import static org.lwjgl.opengl.GL11.glTexImage2D;
+import static org.lwjgl.opengl.GL11.glTexParameteri;
+import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
+import static org.lwjgl.opengl.GL13.glActiveTexture;
+import static org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER;
+import static org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER;
+import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
+import static org.lwjgl.opengl.GL15.glBindBuffer;
+import static org.lwjgl.opengl.GL15.glBufferData;
+import static org.lwjgl.opengl.GL15.glGenBuffers;
 import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.system.MemoryStack.*;
@@ -21,7 +53,7 @@ import static org.lwjgl.system.MemoryUtil.*;
 public class Main {
     private long window;
     private int shaderProgram, vaoId, uniModelMatrix, uniTexture, uniColor, uniTint, uniAlpha, uniUseTexture;
-    private int texPlayer, texPlayerDamage, texEnemy, texBoss, texLaser, texBackground, texBackground2, texBackground3, texBackground4;
+    private int texPlayer, texPlayerDamage, texEnemy, texEnemy2, texBoss, texBoss2, texLaser, texBackground, texBackground2, texBackground3, texBackground4;
 
     private TextRenderer textRenderer;
     private SettingsMenu config = new SettingsMenu();
@@ -41,7 +73,7 @@ public class Main {
     private static final float TRANS_DURACAO = 3.0f; // duração total (s)
     private static final float TRANS_PICO = 1.2f;    // momento da troca de fundo (s)
     private int fundoAtualNivel = 0;
-    
+
     // CORREÇÃO AQUI: O índice 3 agora aponta para o fundo 3 (background4.png).
     // Isto garante que ao matar o boss 4 (bossAtual = 4), o alvo seja 3,
     // diferente do fundo anterior (2), acionando a transição.
@@ -262,7 +294,9 @@ public class Main {
         texPlayer = carregarUmaTextura("demo/src/main/resources/player.png");
         texPlayerDamage = carregarUmaTextura("demo/src/main/resources/playerdamage.png");
         texEnemy = carregarUmaTextura("demo/src/main/resources/enemy.png");
+        texEnemy2 = carregarUmaTextura("demo/src/main/resources/enemy2.png");
         texBoss = carregarUmaTextura("demo/src/main/resources/boss.png");
+        texBoss2 = carregarUmaTextura("demo/src/main/resources/boss2.png");
         texLaser = carregarUmaTextura("demo/src/main/resources/laser.png");
     }
 
@@ -423,10 +457,16 @@ public class Main {
                 glUniform3f(uniTint, 1.0f, 0.3f, 0.3f); // laser inimigo avermelhado
                 for (TiroInimigo ti : tirosInimigos) desenhar(ti.getX() + offsetX, ti.getY() + offsetY, 0.05f, 0.1f, ti.getRotacao(), texLaser, 1.0f);
                 restaurarTextura();
+
+                // Texturas de inimigo/boss mudam no mundo 2 (fundo background2.png)
+                boolean mundo2 = (fundoAtualNivel == 1);
+                int texInimigo = (mundo2 && texEnemy2 != 0) ? texEnemy2 : texEnemy;
+                int texChefe   = (mundo2 && texBoss2 != 0)  ? texBoss2  : texBoss;
+
                 for (Inimigo ini : inimigos) {
                     glUniform3f(uniTint, ini.getR(), ini.getG(), ini.getB());
-                    if (ini.isBoss()) desenhar(ini.getX() + offsetX, ini.getY() + offsetY, 0.35f, 0.35f, 0, texBoss, 1.0f);
-                    else desenhar(ini.getX() + offsetX, ini.getY() + offsetY, 0.15f, 0.15f, 0, texEnemy, 1.0f);
+                    if (ini.isBoss()) desenhar(ini.getX() + offsetX, ini.getY() + offsetY, 0.35f, 0.35f, 0, texChefe, 1.0f);
+                    else desenhar(ini.getX() + offsetX, ini.getY() + offsetY, 0.15f, 0.15f, 0, texInimigo, 1.0f);
                 }
                 restaurarTextura();
                 if (Config.animacoes)
@@ -558,7 +598,11 @@ public class Main {
     }
 
     private void limpar() {
-        glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage); glDeleteTextures(texEnemy); glDeleteTextures(texBoss); glDeleteTextures(texLaser); glDeleteTextures(texBackground); glDeleteTextures(texBackground2); glDeleteTextures(texBackground3); glDeleteTextures(texBackground4);
+        glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage);
+        glDeleteTextures(texEnemy); glDeleteTextures(texEnemy2);
+        glDeleteTextures(texBoss); glDeleteTextures(texBoss2);
+        glDeleteTextures(texLaser);
+        glDeleteTextures(texBackground); glDeleteTextures(texBackground2); glDeleteTextures(texBackground3); glDeleteTextures(texBackground4);
         if (textRenderer != null) textRenderer.cleanup();
         glDeleteProgram(shaderProgram);
         if (window != NULL) { glfwFreeCallbacks(window); glfwDestroyWindow(window); }
