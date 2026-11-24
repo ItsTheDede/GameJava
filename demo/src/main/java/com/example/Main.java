@@ -53,7 +53,8 @@ import static org.lwjgl.system.MemoryUtil.*;
 public class Main {
     private long window;
     private int shaderProgram, vaoId, uniModelMatrix, uniTexture, uniColor, uniTint, uniAlpha, uniUseTexture;
-    private int texPlayer, texPlayerDamage, texEnemy, texEnemy2, texBoss, texBoss2, texLaser, texBackground, texBackground2, texBackground3, texBackground4;
+    private int texPlayer, texPlayerDamage, texLaser, texBackground, texBackground2, texBackground3, texBackground4;
+    private int texEnemy, texEnemy2, texEnemy3, texBoss, texBoss2, texBoss3;
 
     private TextRenderer textRenderer;
     private SettingsMenu config = new SettingsMenu();
@@ -73,10 +74,9 @@ public class Main {
     private static final float TRANS_DURACAO = 3.0f; // duração total (s)
     private static final float TRANS_PICO = 1.2f;    // momento da troca de fundo (s)
     private int fundoAtualNivel = 0;
+    private int ultimoNivelLog = -1; // só para diagnóstico na consola
 
-    // CORREÇÃO AQUI: O índice 3 agora aponta para o fundo 3 (background4.png).
-    // Isto garante que ao matar o boss 4 (bossAtual = 4), o alvo seja 3,
-    // diferente do fundo anterior (2), acionando a transição.
+    // O índice 3 aponta para o fundo 3 (background4.png).
     private static final int[] FUNDO_POR_BOSS = {0, 1, 2, 3, 3};
 
     private static class Estrela {
@@ -295,9 +295,13 @@ public class Main {
         texPlayerDamage = carregarUmaTextura("demo/src/main/resources/playerdamage.png");
         texEnemy = carregarUmaTextura("demo/src/main/resources/enemy.png");
         texEnemy2 = carregarUmaTextura("demo/src/main/resources/enemy2.png");
+        texEnemy3 = carregarUmaTextura("demo/src/main/resources/enemy3.png");
         texBoss = carregarUmaTextura("demo/src/main/resources/boss.png");
         texBoss2 = carregarUmaTextura("demo/src/main/resources/boss2.png");
+        texBoss3 = carregarUmaTextura("demo/src/main/resources/boss3.png");
         texLaser = carregarUmaTextura("demo/src/main/resources/laser.png");
+        System.out.println("Texturas -> enemy=" + texEnemy + " enemy2=" + texEnemy2 + " enemy3=" + texEnemy3
+                + " boss=" + texBoss + " boss2=" + texBoss2 + " boss3=" + texBoss3);
     }
 
     private void criarExplosao(float x, float y) {
@@ -458,10 +462,24 @@ public class Main {
                 for (TiroInimigo ti : tirosInimigos) desenhar(ti.getX() + offsetX, ti.getY() + offsetY, 0.05f, 0.1f, ti.getRotacao(), texLaser, 1.0f);
                 restaurarTextura();
 
-                // Texturas de inimigo/boss mudam no mundo 2 (fundo background2.png)
-                boolean mundo2 = (fundoAtualNivel == 1);
-                int texInimigo = (mundo2 && texEnemy2 != 0) ? texEnemy2 : texEnemy;
-                int texChefe   = (mundo2 && texBoss2 != 0)  ? texBoss2  : texBoss;
+                // Texturas de inimigo/boss por mundo
+                // (fundoAtualNivel: 0 = mundo 1, 1 = mundo 2, 2 = mundo 3, 3 = mundo 4)
+                int texInimigo = texEnemy;
+                int texChefe   = texBoss;
+                if (fundoAtualNivel == 1) {          // mundo 2
+                    if (texEnemy2 != 0) texInimigo = texEnemy2;
+                    if (texBoss2 != 0)  texChefe   = texBoss2;
+                } else if (fundoAtualNivel == 2) {   // mundo 3
+                    if (texEnemy3 != 0) texInimigo = texEnemy3;
+                    if (texBoss3 != 0)  texChefe   = texBoss3;
+                }
+
+                // Diagnóstico: escreve na consola quando o mundo muda
+                if (fundoAtualNivel != ultimoNivelLog) {
+                    ultimoNivelLog = fundoAtualNivel;
+                    System.out.println("Mundo " + (fundoAtualNivel + 1) + " (fundoAtualNivel=" + fundoAtualNivel
+                            + ") -> texInimigo=" + texInimigo + " texChefe=" + texChefe);
+                }
 
                 for (Inimigo ini : inimigos) {
                     glUniform3f(uniTint, ini.getR(), ini.getG(), ini.getB());
@@ -599,8 +617,8 @@ public class Main {
 
     private void limpar() {
         glDeleteTextures(texPlayer); glDeleteTextures(texPlayerDamage);
-        glDeleteTextures(texEnemy); glDeleteTextures(texEnemy2);
-        glDeleteTextures(texBoss); glDeleteTextures(texBoss2);
+        glDeleteTextures(texEnemy); glDeleteTextures(texEnemy2); glDeleteTextures(texEnemy3);
+        glDeleteTextures(texBoss); glDeleteTextures(texBoss2); glDeleteTextures(texBoss3);
         glDeleteTextures(texLaser);
         glDeleteTextures(texBackground); glDeleteTextures(texBackground2); glDeleteTextures(texBackground3); glDeleteTextures(texBackground4);
         if (textRenderer != null) textRenderer.cleanup();
