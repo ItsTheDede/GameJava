@@ -509,7 +509,7 @@ public class Main {
                 Pause.desenharMenuPausa(textRenderer, shaderProgram, vaoId, uniModelMatrix, uniColor, uniAlpha, menuOpcaoPausa);
             } else if (escolhendoMelhoria) {
                 glUniform1f(uniAlpha, 1.0f);
-                glUniform3f(uniColor, 0.0f, 1.0f, 0.0f); desenhar(0.0f, 0.0f, 2.0f, 2.0f, 0, 0, 0.8f);
+                glUniform3f(uniColor, 0.0f, 1.0f, 0.0f); desenhar(0.0f, 0.0f, 2.0f, 2.0f, 0, 0, 1.0f);
                 restaurarTextura();
                 desenhar(-0.5f, 0.0f, 0.2f, 0.2f, 0, texPlayer, 1.0f);
                 desenhar( 0.0f, 0.0f, 0.2f, 0.2f, 0, texEnemy, 1.0f);
