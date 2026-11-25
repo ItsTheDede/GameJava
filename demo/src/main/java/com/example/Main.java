@@ -510,9 +510,10 @@ public class Main {
             } else if (escolhendoMelhoria) {
                 glUniform1f(uniAlpha, 1.0f);
                 glUniform3f(uniColor, 0.0f, 1.0f, 0.0f); desenhar(0.0f, 0.0f, 2.0f, 2.0f, 0, 0, 0.8f);
-                glUniform3f(uniColor, 0.0f, 0.5f, 0.0f); desenhar(-0.5f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
-                glUniform3f(uniColor, 0.0f, 0.5f, 1.0f); desenhar( 0.0f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
-                glUniform3f(uniColor, 1.0f, 0.5f, 0.0f); desenhar( 0.5f, 0.0f, 0.2f, 0.2f, 0, 0, 1.0f);
+                restaurarTextura();
+                desenhar(-0.5f, 0.0f, 0.2f, 0.2f, 0, texPlayer, 1.0f);
+                desenhar( 0.0f, 0.0f, 0.2f, 0.2f, 0, texEnemy, 1.0f);
+                desenhar( 0.5f, 0.0f, 0.08f, 0.2f, 0, texLaser, 1.0f);
 
                 texto(Config.t("M_TITULO"), 0.0f, 0.45f, 0.8f, 1f, 1f, 1f);
                 texto(Config.t("M_VIDA"), -0.5f, -0.2f, 0.35f, 1f, 1f, 1f);
@@ -569,9 +570,10 @@ public class Main {
 
             case 3: // melhorias (mesmas cores e textos do ecra de escolha)
                 texto("Depois de cada boss escolhes uma melhoria:", 0.0f, 0.5f, 0.4f, 1f, 1f, 1f);
-                glUniform3f(uniColor, 0.0f, 0.5f, 0.0f); desenhar(-0.5f, 0.05f, 0.2f, 0.2f, 0, 0, 1.0f);
-                glUniform3f(uniColor, 0.0f, 0.5f, 1.0f); desenhar( 0.0f, 0.05f, 0.2f, 0.2f, 0, 0, 1.0f);
-                glUniform3f(uniColor, 1.0f, 0.5f, 0.0f); desenhar( 0.5f, 0.05f, 0.2f, 0.2f, 0, 0, 1.0f);
+                restaurarTextura();
+                desenhar(-0.5f, 0.05f, 0.2f, 0.2f, 0, texPlayer, 1.0f);
+                desenhar( 0.0f, 0.05f, 0.2f, 0.2f, 0, texEnemy, 1.0f);
+                desenhar( 0.5f, 0.05f, 0.08f, 0.2f, 0, texLaser, 1.0f);
                 texto(Config.t("M_VIDA"), -0.5f, -0.15f, 0.35f, 1f, 1f, 1f);
                 texto(Config.t("M_RESIST"), 0.0f, -0.15f, 0.35f, 1f, 1f, 1f);
                 texto(Config.t("M_TIRO"), 0.5f, -0.15f, 0.35f, 1f, 1f, 1f);
